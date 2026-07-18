@@ -1,0 +1,325 @@
+-- // FeVilAi Core: FLUXHUB 3.6 (Sheriff vs Murders Duels)
+-- // [YAKUSHA EDITION] - Visuals Restored, Moving Aim Fix, Skybox Fix
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "FLUXHUB 3.6 | FeVilAi",
+    LoadingTitle = "FLUXHUB 3.6",
+    LoadingSubtitle = "Ultimate Delta Core",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false
+})
+
+-- // СЕРВИСЫ
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- // ГЛОБАЛЬНЫЕ НАСТРОЙКИ
+local Settings = {
+    Aim = { Enabled = false, Part = "Head", FOV = 500, Wallbang = false },
+    Hitbox = { Enabled = false, Size = 5, Transparency = 0.6 },
+    ESP = { Enabled = false, ShowNames = false, ShowDistance = false, Chams = false },
+    Movement = { SpeedEnabled = false, Speed = 16, Bhop = false, Fly = false, FlySpeed = 50, AutoStrafe = false },
+    HvH = { Spinbot = false, SpinSpeed = 40 },
+    Misc = { Fullbright = false }
+}
+
+local CurrentTarget = nil
+local SpinAngle = 0
+
+-- // ПОИСК ЦЕЛИ
+local function GetTarget()
+    local target = nil
+    local shortestDist = Settings.Aim.FOV
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local targetPart = player.Character:FindFirstChild(Settings.Aim.Part)
+            if targetPart then
+                local pos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen or Settings.Aim.Wallbang then
+                    local dist = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        target = targetPart
+                    end
+                end
+            end
+        end
+    end
+    return target
+end
+
+RunService.RenderStepped:Connect(function()
+    if Settings.Aim.Enabled then CurrentTarget = GetTarget() else CurrentTarget = nil end
+end)
+
+-- // ИСПРАВЛЕННЫЙ АИМ И WALLBANG ХУК (Работает в движении)
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+
+    if Settings.Aim.Enabled and not checkcaller() and CurrentTarget then
+        local origin = args[1]
+        
+        if method == "Raycast" and typeof(origin) == "Vector3" then
+            -- Берем реальную точку выстрела, чтобы не ломалось при движении
+            local direction = (CurrentTarget.Position - origin).Unit * 1000
+            args[2] = direction
+            return oldNamecall(self, unpack(args))
+            
+        elseif (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay") and typeof(origin) == "Ray" then
+            local realOrigin = origin.Origin
+            local direction = (CurrentTarget.Position - realOrigin).Unit * 1000
+            args[1] = Ray.new(realOrigin, direction)
+            return oldNamecall(self, unpack(args))
+        end
+    end
+    return oldNamecall(self, ...)
+end)
+
+local oldIndex
+oldIndex = hookmetamethod(game, "__index", function(self, key)
+    if Settings.Aim.Enabled and not checkcaller() and key == "Hit" and self == Mouse and CurrentTarget then
+        return CFrame.new(CurrentTarget.Position)
+    end
+    return oldIndex(self, key)
+end)
+
+-- // ВОССТАНОВЛЕННЫЙ ESP (ВИЗУАЛЫ)
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    local char = player.Character
+    if not char then return end
+
+    if Settings.ESP.Chams and not char:FindFirstChild("FluxChams") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "FluxChams"
+        highlight.Parent = char
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.5
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    end
+
+    if (Settings.ESP.ShowNames or Settings.ESP.ShowDistance) and char:FindFirstChild("HumanoidRootPart") and not char:FindFirstChild("FluxText") then
+        local bg = Instance.new("BillboardGui")
+        bg.Name = "FluxText"
+        bg.Parent = char
+        bg.AlwaysOnTop = true
+        bg.Size = UDim2.new(0, 200, 0, 50)
+        bg.StudsOffset = Vector3.new(0, 3, 0)
+        
+        local text = Instance.new("TextLabel")
+        text.Parent = bg
+        text.BackgroundTransparency = 1
+        text.Size = UDim2.new(1, 0, 1, 0)
+        text.Font = Enum.Font.GothamBold
+        text.TextSize = 14
+        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+        text.TextStrokeTransparency = 0
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            if Settings.ESP.Enabled then
+                CreateESP(player)
+                if char:FindFirstChild("FluxText") then
+                    local textLabel = char.FluxText.TextLabel
+                    local dist = math.floor((Camera.CFrame.Position - char.HumanoidRootPart.Position).Magnitude)
+                    local str = ""
+                    if Settings.ESP.ShowNames then str = str .. player.Name .. "\n" end
+                    if Settings.ESP.ShowDistance then str = str .. "[" .. dist .. "m]" end
+                    textLabel.Text = str
+                    char.FluxText.Enabled = (Settings.ESP.ShowNames or Settings.ESP.ShowDistance)
+                end
+                if char:FindFirstChild("FluxChams") then char.FluxChams.Enabled = Settings.ESP.Chams end
+            else
+                if char:FindFirstChild("FluxText") then char.FluxText:Destroy() end
+                if char:FindFirstChild("FluxChams") then char.FluxChams:Destroy() end
+            end
+        end
+    end
+end)
+
+-- // ПОЛЕТ (FLY)
+local FlyBody, FlyGyro
+RunService.Stepped:Connect(function()
+    if Settings.Movement.Fly and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if not FlyBody then
+            FlyBody = Instance.new("BodyVelocity", hrp)
+            FlyBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+            FlyGyro = Instance.new("BodyGyro", hrp)
+            FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+            FlyGyro.P = 9e4
+        end
+        local moveDir = hum.MoveDirection
+        FlyBody.Velocity = (Camera.CFrame.LookVector * (moveDir.Z * -1) + Camera.CFrame.RightVector * moveDir.X) * Settings.Movement.FlySpeed
+        FlyGyro.CFrame = Camera.CFrame
+        if moveDir.Magnitude > 0 then
+            FlyBody.Velocity = Camera.CFrame.LookVector * Settings.Movement.FlySpeed
+        else
+            FlyBody.Velocity = Vector3.new(0, 0, 0)
+        end
+    else
+        if FlyBody then FlyBody:Destroy(); FlyBody = nil end
+        if FlyGyro then FlyGyro:Destroy(); FlyGyro = nil end
+    end
+end)
+
+-- // BHOP & AUTO STRAFE
+local strafeTick = 0
+local strafeDir = 1
+RunService.Heartbeat:Connect(function()
+    if not LocalPlayer.Character then return end
+    
+    local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    -- Bhop
+    if Settings.Movement.Bhop and hum and hum.FloorMaterial ~= Enum.Material.Air and hum.MoveDirection.Magnitude > 0 then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+    
+    -- Auto Strafe
+    if Settings.Movement.AutoStrafe and hrp then
+        if tick() - strafeTick > 0.3 then
+            strafeDir = strafeDir * -1
+            strafeTick = tick()
+        end
+        hrp.CFrame = hrp.CFrame * CFrame.new(0.5 * strafeDir, 0, 0)
+    end
+end)
+
+-- // ВКЛАДКИ UI
+local CombatTab = Window:CreateTab("🎯 Combat", nil)
+local VisualsTab = Window:CreateTab("👁️ Visuals", nil)
+local HitboxTab = Window:CreateTab("🔪 Hitboxes", nil)
+local MovementTab = Window:CreateTab("🏃 Movement", nil)
+local HvHTab = Window:CreateTab("💀 HvH", nil)
+local MiscTab = Window:CreateTab("⚙️ Misc", nil)
+
+-- // COMBAT
+CombatTab:CreateToggle({ Name = "Silent Aim", CurrentValue = false, Callback = function(v) Settings.Aim.Enabled = v end })
+CombatTab:CreateToggle({ Name = "Wallbang (Shoot through walls)", CurrentValue = false, Callback = function(v) Settings.Aim.Wallbang = v end })
+CombatTab:CreateDropdown({ Name = "Aim Part", Options = {"Head", "Torso", "HumanoidRootPart"}, CurrentOption = {"Head"}, Callback = function(v) Settings.Aim.Part = v[1] end })
+CombatTab:CreateSlider({ Name = "FOV Radius", Range = {50, 500}, Increment = 10, CurrentValue = 150, Callback = function(v) Settings.Aim.FOV = v end })
+CombatTab:CreateButton({
+    Name = "⚡ KILL ALL",
+    Callback = function()
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+        local originalPos = LocalPlayer.Character.HumanoidRootPart.CFrame
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                task.wait(0.2)
+            end
+        end
+        LocalPlayer.Character.HumanoidRootPart.CFrame = originalPos
+    end
+})
+
+-- // VISUALS
+VisualsTab:CreateToggle({ Name = "Enable Master ESP", CurrentValue = false, Callback = function(v) Settings.ESP.Enabled = v end })
+VisualsTab:CreateToggle({ Name = "Show Names", CurrentValue = false, Callback = function(v) Settings.ESP.ShowNames = v end })
+VisualsTab:CreateToggle({ Name = "Show Distance", CurrentValue = false, Callback = function(v) Settings.ESP.ShowDistance = v end })
+VisualsTab:CreateToggle({ Name = "Chams (Wallhack)", CurrentValue = false, Callback = function(v) Settings.ESP.Chams = v end })
+
+-- // HITBOXES
+HitboxTab:CreateToggle({ Name = "Enable Hitbox Expander", CurrentValue = false, Callback = function(v) Settings.Hitbox.Enabled = v end })
+HitboxTab:CreateSlider({ Name = "Hitbox Size", Range = {2, 30}, Increment = 1, CurrentValue = 5, Callback = function(v) Settings.Hitbox.Size = v end })
+HitboxTab:CreateSlider({ Name = "Hitbox Transparency", Range = {0, 100}, Increment = 10, CurrentValue = 60, Callback = function(v) Settings.Hitbox.Transparency = v / 100 end })
+
+RunService.Heartbeat:Connect(function()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            if Settings.Hitbox.Enabled then
+                hrp.Size = Vector3.new(Settings.Hitbox.Size, Settings.Hitbox.Size, Settings.Hitbox.Size)
+                hrp.Transparency = Settings.Hitbox.Transparency
+                hrp.CanCollide = false
+            else
+                hrp.Size = Vector3.new(2, 2, 1)
+                hrp.Transparency = 1
+            end
+        end
+    end
+end)
+
+-- // MOVEMENT
+MovementTab:CreateToggle({ Name = "Mobile Fly", CurrentValue = false, Callback = function(v) Settings.Movement.Fly = v end })
+MovementTab:CreateSlider({ Name = "Fly Speed", Range = {20, 200}, Increment = 5, CurrentValue = 50, Callback = function(v) Settings.Movement.FlySpeed = v end })
+MovementTab:CreateToggle({ Name = "Enable WalkSpeed", CurrentValue = false, Callback = function(v) Settings.Movement.SpeedEnabled = v end })
+MovementTab:CreateSlider({ Name = "WalkSpeed", Range = {16, 150}, Increment = 1, CurrentValue = 16, Callback = function(v) Settings.Movement.Speed = v end })
+MovementTab:CreateToggle({ Name = "Auto Bhop (Bunnyhop)", CurrentValue = false, Callback = function(v) Settings.Movement.Bhop = v end })
+MovementTab:CreateToggle({ Name = "Auto Strafe (Dodge bullets)", CurrentValue = false, Callback = function(v) Settings.Movement.AutoStrafe = v end })
+
+RunService.Heartbeat:Connect(function()
+    if Settings.Movement.SpeedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = Settings.Movement.Speed
+    end
+end)
+
+-- // HvH
+HvHTab:CreateToggle({ Name = "Spinbot", CurrentValue = false, Callback = function(v) 
+    Settings.HvH.Spinbot = v 
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.AutoRotate = not v
+    end
+end })
+HvHTab:CreateSlider({ Name = "Spin Speed", Range = {10, 100}, Increment = 5, CurrentValue = 40, Callback = function(v) Settings.HvH.SpinSpeed = v end })
+
+RunService.RenderStepped:Connect(function()
+    if Settings.HvH.Spinbot and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        SpinAngle = SpinAngle + Settings.HvH.SpinSpeed
+        LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(SpinAngle), 0)
+    end
+end)
+
+-- // MISC
+MiscTab:CreateDropdown({
+    Name = "Skybox Changer",
+    Options = {"Default", "Galaxy Space", "Blood Moon", "Pitch Black"},
+    CurrentOption = {"Default"},
+    Callback = function(Option)
+        -- Принудительно удаляем всё, что мешает небу
+        for _, v in pairs(Lighting:GetChildren()) do
+            if v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") then
+                v:Destroy()
+            end
+        end
+        
+        local sky = Instance.new("Sky", Lighting)
+        Lighting.FogEnd = 100000 -- Убираем туман, чтобы было видно небо
+        Lighting.GlobalShadows = false
+        
+        if Option[1] == "Galaxy Space" then
+            sky.SkyboxBk = "rbxassetid://153692994" sky.SkyboxDn = "rbxassetid://153692994" sky.SkyboxFt = "rbxassetid://153692994"
+            sky.SkyboxLf = "rbxassetid://153692994" sky.SkyboxRt = "rbxassetid://153692994" sky.SkyboxUp = "rbxassetid://153692994"
+        elseif Option[1] == "Blood Moon" then
+            sky.SkyboxBk = "rbxassetid://2323602932" sky.SkyboxDn = "rbxassetid://2323602932" sky.SkyboxFt = "rbxassetid://2323602932"
+            sky.SkyboxLf = "rbxassetid://2323602932" sky.SkyboxRt = "rbxassetid://2323602932" sky.SkyboxUp = "rbxassetid://2323602932"
+        elseif Option[1] == "Pitch Black" then
+            sky.SkyboxBk = "" sky.SkyboxDn = "" sky.SkyboxFt = "" sky.SkyboxLf = "" sky.SkyboxRt = "" sky.SkyboxUp = ""
+        else
+            sky:Destroy()
+            Lighting.GlobalShadows = true -- Возвращаем тени для дефолта
+        end
+    end,
+})
+
+Rayfield:LoadConfiguration()
