@@ -940,7 +940,7 @@ UIS.InputEnded:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
 end)
-closeBtn.MouseButton1Click:Connect(function() gui.Enabled = false end)
+closeBtn.MouseButton1Click:Connect(function() main.Visible = false end)
 
 local fab = new("TextButton", {
     Size = UDim2.fromOffset(42, 42), Position = UDim2.new(0, 12, 0, 90),
@@ -964,7 +964,7 @@ fab.InputEnded:Connect(function(i)
         or i.UserInputType == Enum.UserInputType.Touch then
         local moved = (i.Position - fabStart).Magnitude
         fabDrag = false
-        if moved < 12 then gui.Enabled = not gui.Enabled end
+        if moved < 12 then main.Visible = not main.Visible end
     end
 end)
 UIS.InputChanged:Connect(function(i)
@@ -979,7 +979,7 @@ end)
 UIS.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == Enum.KeyCode.RightShift then
-        gui.Enabled = not gui.Enabled
+        main.Visible = not main.Visible
     end
 end)
 
